@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CONTRACTS, DEMO_ACCOUNT, EXPLORER, RELAYER_URL, ROSTER } from "../lib/config";
 import { getInventory, getFtBalance, getRate, fmtToken } from "../lib/near";
+import { fetchActivity, buildFeed, type FeedEntry } from "../lib/indexer";
 import { useWallet } from "../lib/wallet";
 
 interface Live {
@@ -28,6 +29,8 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [feed, setFeed] = useState<FeedEntry[] | null>(null);
+  const [feedDown, setFeedDown] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -47,10 +50,30 @@ export default function Home() {
     }
   }, [account]);
 
+  const loadFeed = useCallback(async () => {
+    try {
+      setFeedDown(false);
+      setFeed(buildFeed(await fetchActivity(account)));
+    } catch {
+      setFeedDown(true);
+      setFeed([]);
+    }
+  }, [account]);
+
   useEffect(() => {
     setLive(null);
+    setFeed(null);
     load();
-  }, [load]);
+    loadFeed();
+  }, [load, loadFeed]);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      load();
+      loadFeed();
+    }, 25000);
+    return () => clearInterval(t);
+  }, [load, loadFeed]);
 
   const convert = useCallback(async () => {
     if (!accountId) return signIn();
@@ -67,14 +90,16 @@ export default function Home() {
         120,
         "1",
       );
-      setNote("Conversion submitted — balances update on return.");
+      setNote("Conversion submitted — balances & activity update shortly.");
       load();
+      setTimeout(loadFeed, 7000);
+      setTimeout(loadFeed, 20000);
     } catch (e) {
       setNote(String(e));
     } finally {
       setBusy(false);
     }
-  }, [accountId, nxc, signIn, signAndSend, load]);
+  }, [accountId, nxc, signIn, signAndSend, load, loadFeed]);
 
   const claim = useCallback(async () => {
     if (!accountId) return signIn();
@@ -88,14 +113,16 @@ export default function Home() {
       });
       const j = await r.json();
       if (!r.ok || j.error) throw new Error(j.error ?? "relay failed");
-      setNote("Loot claimed — gasless. Inventory updating…");
+      setNote("Loot claimed — gasless. Inventory & activity updating…");
       setTimeout(load, 1500);
+      setTimeout(loadFeed, 7000);
+      setTimeout(loadFeed, 20000);
     } catch (e) {
       setNote(String(e));
     } finally {
       setClaiming(false);
     }
-  }, [accountId, signIn, load]);
+  }, [accountId, signIn, load, loadFeed]);
 
   const rateLabel = live ? `${live.rate[1]} NXC = ${live.rate[0]} KZR` : "…";
 
@@ -192,7 +219,7 @@ export default function Home() {
                 <span className="out">MK-1 Stability Module</span>
               </div>
               <div style={{ height: 14 }}></div>
-              <button className="btn btn-ghost btn-block" disabled title="Gasless craft via the relayer (ticket 10)">
+              <button type="button" className="btn btn-ghost btn-block" disabled title="Gasless craft — coming soon">
                 Craft Upgrade <span className="gasless">Gasless · soon</span>
               </button>
             </div>
@@ -219,12 +246,24 @@ export default function Home() {
         </div>
 
         <div className="section">
-          <div className="sec-head"><h2>Activity</h2><span className="muted mono">NEP-297 event feed</span></div>
+          <div className="sec-head"><h2>Activity</h2><span className="muted mono">NEP-297 event feed · indexed live</span></div>
           <div className="panel feed">
-            <div className="ev"><span className="ico" style={{ color: "var(--info)" }}>⇄</span><span><b>Converted</b> 500 NXC → 5 KZR</span><span className="tx">live on testnet</span></div>
-            <div className="ev"><span className="ico" style={{ color: "var(--primary)" }}>✦</span><span><b>Claimed</b> Awaken the Nexus loot — 30 Rifle Cell + 1 Hackclaw</span><span className="tx">live on testnet</span></div>
+            {feed === null && <div className="ev"><span className="muted">Loading activity…</span></div>}
+            {feed !== null && feedDown && (
+              <div className="ev"><span className="ico" style={{ color: "var(--warn)" }}>!</span><span className="muted">Activity feed temporarily unavailable — the on-chain reads above are live.</span></div>
+            )}
+            {feed !== null && !feedDown && feed.length === 0 && (
+              <div className="ev"><span className="muted">No on-chain activity yet for {account}. Claim loot or convert NXC to see it here.</span></div>
+            )}
+            {feed !== null && !feedDown && feed.map((e) => (
+              <div className="ev" key={e.id}>
+                <span className="ico" style={{ color: e.color }}>{e.icon}</span>
+                <span><b>{e.verb}</b> {e.rest}</span>
+                <span className="tx">{e.when}</span>
+              </div>
+            ))}
           </div>
-          <div className="notice">Claim &amp; craft become gasless one-click via the relayer (ticket 10); full feed via the indexer (ticket 09).</div>
+          <div className="notice">Every entry is a real testnet transaction, indexed from on-chain NEP-297 events for <b>{account}</b>.</div>
         </div>
 
         <footer>
