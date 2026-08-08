@@ -106,6 +106,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.paused = true;
+        Self::emit_admin("paused", near_sdk::serde_json::json!({}));
     }
 
     #[payable]
@@ -113,6 +114,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.paused = false;
+        Self::emit_admin("unpaused", near_sdk::serde_json::json!({}));
     }
 
     #[payable]
@@ -120,6 +122,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.minters.insert(&account_id);
+        Self::emit_admin("minter_added", near_sdk::serde_json::json!({ "account_id": account_id }));
     }
 
     #[payable]
@@ -127,12 +130,15 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.minters.remove(&account_id);
+        Self::emit_admin("minter_removed", near_sdk::serde_json::json!({ "account_id": account_id }));
     }
 
     #[payable]
     pub fn set_owner(&mut self, new_owner: AccountId) {
         assert_one_yocto();
         self.assert_owner();
+        let old_owner = self.owner_id.clone();
+        Self::emit_admin("owner_changed", near_sdk::serde_json::json!({ "old_owner": old_owner, "new_owner": new_owner }));
         self.owner_id = new_owner;
     }
 
@@ -141,6 +147,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.sinks.insert(&account_id);
+        Self::emit_admin("sink_registered", near_sdk::serde_json::json!({ "account_id": account_id }));
     }
 
     #[payable]
@@ -148,6 +155,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.sinks.remove(&account_id);
+        Self::emit_admin("sink_unregistered", near_sdk::serde_json::json!({ "account_id": account_id }));
     }
 
     #[payable]
@@ -155,6 +163,23 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.transfer_cap = cap.into();
+        Self::emit_admin("transfer_cap_changed", near_sdk::serde_json::json!({ "cap": cap }));
+    }
+
+    fn emit_admin(event: &str, mut data: near_sdk::serde_json::Value) {
+        if let Some(obj) = data.as_object_mut() {
+            obj.insert(
+                "by".to_string(),
+                near_sdk::serde_json::json!(near_sdk::env::predecessor_account_id()),
+            );
+        }
+        let payload = near_sdk::serde_json::json!({
+            "standard": "kzr_admin",
+            "version": "1.0.0",
+            "event": event,
+            "data": [data],
+        });
+        near_sdk::env::log_str(&format!("EVENT_JSON:{}", payload));
     }
 
     pub fn is_paused(&self) -> bool {
@@ -324,6 +349,55 @@ mod tests {
     fn new_contract() -> Contract {
         ctx(accounts(0), 0);
         Contract::new(accounts(0))
+    }
+
+    #[test]
+    fn admin_action_emits_kzr_admin_event() {
+        let mut c = new_contract();
+        ctx(accounts(0), 1);
+        c.set_transfer_cap(U128(123));
+        let ev = near_sdk::test_utils::get_logs()
+            .into_iter()
+            .find(|l| l.contains("EVENT_JSON"))
+            .expect("admin event not emitted");
+        assert!(ev.contains("\"standard\":\"kzr_admin\""));
+        assert!(ev.contains("\"event\":\"transfer_cap_changed\""));
+        assert!(ev.contains("\"cap\":\"123\""));
+        assert!(ev.contains("\"by\":"));
+    }
+
+    fn lcg(seed: &mut u64) -> u64 {
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        *seed
+    }
+
+    #[test]
+    fn randomized_p2p_cap_tracks() {
+        let mut c = new_contract();
+        let mut seed: u64 = 0x0C0F_FEE1_2345_6789;
+        for i in 0u64..48 {
+            let sender: AccountId = format!("s{}.near", i).parse().unwrap();
+            let recv: AccountId = format!("r{}.near", i).parse().unwrap();
+            ctx(accounts(0), 0);
+            c.mint(sender.clone(), U128(1_000 * ONE));
+            c.mint(recv.clone(), U128(ONE));
+            let mut used = 0u128;
+            let n = (lcg(&mut seed) % 5) + 1;
+            for _ in 0..n {
+                let a = ((lcg(&mut seed) % 10) + 1) as u128;
+                if used + a > 50 {
+                    break;
+                }
+                ctx(sender.clone(), 1);
+                c.ft_transfer(recv.clone(), U128(a * ONE), None);
+                used += a;
+                assert_eq!(c.p2p_transferred_of(sender.clone()).0, used * ONE);
+                assert_eq!(c.ft_balance_of(recv.clone()).0, (1 + used) * ONE);
+            }
+            assert!(used <= 50);
+        }
     }
 
     #[test]

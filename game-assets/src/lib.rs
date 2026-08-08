@@ -335,14 +335,17 @@ impl Contract {
             "Already registered"
         );
         let _: u64 = token_id.parse().expect("Invalid token id");
-        self.max_supply.insert(&token_id, &max_supply.into());
+        let max: u128 = max_supply.into();
+        self.max_supply.insert(&token_id, &max);
         self.supply.insert(&token_id, &0);
+        Self::emit_admin("token_registered", json!({ "token_id": token_id, "max_supply": U128(max) }));
     }
 
     #[payable]
     pub fn set_signer_public_key(&mut self, signer_public_key: Base64VecU8) {
         assert_one_yocto();
         self.assert_owner();
+        Self::emit_admin("signer_key_changed", json!({ "signer_public_key": signer_public_key }));
         self.signer_pk = Self::to_ed25519_key(signer_public_key);
     }
 
@@ -350,6 +353,7 @@ impl Contract {
     pub fn set_base_uri(&mut self, base_uri: String) {
         assert_one_yocto();
         self.assert_owner();
+        Self::emit_admin("base_uri_changed", json!({ "base_uri": base_uri }));
         self.base_uri = base_uri;
     }
 
@@ -357,6 +361,7 @@ impl Contract {
     pub fn set_daily_mint_cap(&mut self, daily_mint_cap: U128) {
         assert_one_yocto();
         self.assert_owner();
+        Self::emit_admin("daily_cap_changed", json!({ "daily_mint_cap": daily_mint_cap }));
         self.daily_mint_cap = daily_mint_cap.into();
     }
 
@@ -365,6 +370,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.paused = true;
+        Self::emit_admin("paused", json!({}));
     }
 
     #[payable]
@@ -372,12 +378,15 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.paused = false;
+        Self::emit_admin("unpaused", json!({}));
     }
 
     #[payable]
     pub fn set_owner(&mut self, new_owner: AccountId) {
         assert_one_yocto();
         self.assert_owner();
+        let old_owner = self.owner_id.clone();
+        Self::emit_admin("owner_changed", json!({ "old_owner": old_owner, "new_owner": new_owner }));
         self.owner_id = new_owner;
     }
 
@@ -523,6 +532,19 @@ impl Contract {
         env::log_str(&format!("EVENT_JSON:{}", payload));
     }
 
+    fn emit_admin(event: &str, mut data: near_sdk::serde_json::Value) {
+        if let Some(obj) = data.as_object_mut() {
+            obj.insert("by".to_string(), json!(env::predecessor_account_id()));
+        }
+        let payload = json!({
+            "standard": "kzr_admin",
+            "version": "1.0.0",
+            "event": event,
+            "data": [data],
+        });
+        env::log_str(&format!("EVENT_JSON:{}", payload));
+    }
+
     fn emit_mint(&self, owner_id: &AccountId, token_ids: &[TokenId], amounts: &[u128]) {
         Self::emit(
             "mt_mint",
@@ -616,6 +638,20 @@ mod tests {
         )
     }
 
+    #[test]
+    fn admin_action_emits_kzr_admin_event() {
+        let mut c = new_contract();
+        set_context(accounts(0), 1, 1_000);
+        c.pause();
+        let ev = near_sdk::test_utils::get_logs()
+            .into_iter()
+            .find(|l| l.contains("EVENT_JSON"))
+            .expect("admin event not emitted");
+        assert!(ev.contains("\"standard\":\"kzr_admin\""));
+        assert!(ev.contains("\"event\":\"paused\""));
+        assert!(ev.contains("\"by\":"));
+    }
+
     fn register(c: &mut Contract, token_id: &str, max: u128) {
         set_context(accounts(0), 1, 1_000); // owner, 1 yocto
         c.register_token(token_id.to_string(), U128(max));
@@ -642,6 +678,59 @@ mod tests {
         let msg = near_sdk::borsh::to_vec(voucher).unwrap();
         let sig = signing_key().sign(&msg);
         Base64VecU8(sig.to_bytes().to_vec())
+    }
+
+    fn lcg(seed: &mut u64) -> u64 {
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        *seed
+    }
+
+    #[test]
+    fn randomized_supply_tracks_and_bounds() {
+        let mut c = Contract::new(
+            accounts(0),
+            signer_public_key(),
+            CHAIN.to_string(),
+            "ipfs://base/".to_string(),
+            U128(u128::MAX),
+        );
+        let mut seed: u64 = 0x1234_5678_9ABC_DEF0;
+        for i in 0u64..64 {
+            let tid = c.build_token_id(0, 1, 1, (i as u32) + 1);
+            let max = 100u128;
+            set_context(accounts(0), 1, 1_000);
+            c.register_token(tid.clone(), U128(max));
+            let mut total = 0u128;
+            let n = (lcg(&mut seed) % 5) + 1;
+            for j in 0..n {
+                let amt = ((lcg(&mut seed) % 20) + 1) as u128;
+                if total + amt > max {
+                    break;
+                }
+                let nonce = i * 1000 + j + 1;
+                let mut mh = [0u8; 32];
+                mh[0..8].copy_from_slice(&nonce.to_le_bytes());
+                let v = MintVoucher {
+                    contract_id: contract_id(),
+                    chain_id: CHAIN.to_string(),
+                    receiver_id: accounts(1),
+                    token_ids: vec![tid.clone()],
+                    amounts: vec![U128(amt)],
+                    nonce,
+                    expires_at_ns: 10_000_000,
+                    mission_hash: mh,
+                };
+                let sig = sign(&v);
+                set_context(accounts(1), NearToken::from_near(1).as_yoctonear(), 2_000);
+                c.mint_with_voucher(v, sig);
+                total += amt;
+                assert_eq!(c.mt_supply(tid.clone()).unwrap().0, total);
+                assert!(total <= max);
+                assert!(c.is_nonce_used(nonce));
+            }
+        }
     }
 
     #[test]

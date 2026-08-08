@@ -173,10 +173,24 @@ impl Contract {
         env::log_str(&format!("EVENT_JSON:{}", payload));
     }
 
+    fn emit_admin(event: &str, mut data: near_sdk::serde_json::Value) {
+        if let Some(obj) = data.as_object_mut() {
+            obj.insert("by".to_string(), json!(env::predecessor_account_id()));
+        }
+        let payload = json!({
+            "standard": "kzr_admin",
+            "version": "1.0.0",
+            "event": event,
+            "data": [data],
+        });
+        env::log_str(&format!("EVENT_JSON:{}", payload));
+    }
+
     #[payable]
     pub fn burn_collected(&mut self, amount: U128) -> Promise {
         assert_one_yocto();
         self.assert_owner();
+        Self::emit_admin("collected_burned", json!({ "amount": amount }));
         ext_coin::ext(self.coin_token.clone())
             .with_static_gas(MINT_GAS)
             .burn(amount)
@@ -187,6 +201,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         require!(rate_num.0 > 0 && rate_den.0 > 0, "Invalid rate");
+        Self::emit_admin("rate_changed", json!({ "rate_num": rate_num, "rate_den": rate_den }));
         self.rate_num = rate_num.into();
         self.rate_den = rate_den.into();
     }
@@ -195,6 +210,7 @@ impl Contract {
     pub fn set_caps(&mut self, daily_cap: U128, lifetime_cap: U128) {
         assert_one_yocto();
         self.assert_owner();
+        Self::emit_admin("caps_changed", json!({ "daily_cap": daily_cap, "lifetime_cap": lifetime_cap }));
         self.daily_cap = daily_cap.into();
         self.lifetime_cap = lifetime_cap.into();
     }
@@ -204,6 +220,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.paused = true;
+        Self::emit_admin("paused", json!({}));
     }
 
     #[payable]
@@ -211,12 +228,15 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.paused = false;
+        Self::emit_admin("unpaused", json!({}));
     }
 
     #[payable]
     pub fn set_owner(&mut self, new_owner: AccountId) {
         assert_one_yocto();
         self.assert_owner();
+        let old_owner = self.owner_id.clone();
+        Self::emit_admin("owner_changed", json!({ "old_owner": old_owner, "new_owner": new_owner }));
         self.owner_id = new_owner;
     }
 
@@ -232,6 +252,7 @@ impl Contract {
     pub fn owner_withdraw(&mut self, amount: U128) -> Promise {
         assert_one_yocto();
         self.assert_owner();
+        Self::emit_admin("owner_withdrew", json!({ "amount": amount }));
         Promise::new(self.owner_id.clone()).transfer(NearToken::from_yoctonear(amount.into()))
     }
 
@@ -317,6 +338,55 @@ mod tests {
             U128(100 * ONE),
             U128(1_000 * ONE),
         )
+    }
+
+    #[test]
+    fn admin_action_emits_kzr_admin_event() {
+        let mut c = new_contract();
+        ctx(accounts(0), 1, 1_000);
+        c.set_rate(U128(3), U128(7));
+        let ev = near_sdk::test_utils::get_logs()
+            .into_iter()
+            .find(|l| l.contains("EVENT_JSON"))
+            .expect("admin event not emitted");
+        assert!(ev.contains("\"standard\":\"kzr_admin\""));
+        assert!(ev.contains("\"event\":\"rate_changed\""));
+        assert!(ev.contains("\"by\":"));
+    }
+
+    fn lcg(seed: &mut u64) -> u64 {
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        *seed
+    }
+
+    #[test]
+    fn randomized_reserve_and_rollback() {
+        let mut c = new_contract();
+        let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+        let day = 2_000u64 / DAY_NS;
+        for i in 0u64..64 {
+            let sender: AccountId = format!("s{}.near", i).parse().unwrap();
+            let nxc = (((lcg(&mut seed) % 50) + 1) as u128) * ONE;
+            let kzr = c.quote(U128(nxc)).0;
+            assert!(kzr <= nxc);
+            assert_eq!(kzr, nxc / 100);
+            ctx(accounts(4), 0, 2_000);
+            let _ = c.ft_on_transfer(sender.clone(), U128(nxc), String::new());
+            assert_eq!(c.daily_converted_of(sender.clone(), day).0, kzr);
+            assert_eq!(c.lifetime_converted_of(sender.clone()).0, kzr);
+            ctx(accounts(0), 0, 2_000);
+            if lcg(&mut seed) % 2 == 0 {
+                let _ = c.on_mint_complete(sender.clone(), U128(kzr), U128(nxc), day, Err(near_sdk::PromiseError::Failed));
+                assert_eq!(c.daily_converted_of(sender.clone(), day).0, 0u128);
+                assert_eq!(c.lifetime_converted_of(sender.clone()).0, 0u128);
+            } else {
+                let _ = c.on_mint_complete(sender.clone(), U128(kzr), U128(nxc), day, Ok(()));
+                assert_eq!(c.daily_converted_of(sender.clone(), day).0, kzr);
+                assert_eq!(c.lifetime_converted_of(sender.clone()).0, kzr);
+            }
+        }
     }
 
     #[test]

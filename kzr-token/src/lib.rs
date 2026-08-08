@@ -164,6 +164,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.paused = true;
+        Self::emit_admin("paused", near_sdk::serde_json::json!({}));
     }
 
     #[payable]
@@ -171,6 +172,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.paused = false;
+        Self::emit_admin("unpaused", near_sdk::serde_json::json!({}));
     }
 
 
@@ -179,6 +181,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.minters.insert(&account_id);
+        Self::emit_admin("minter_added", near_sdk::serde_json::json!({ "account_id": account_id }));
     }
 
     #[payable]
@@ -186,6 +189,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         self.minters.remove(&account_id);
+        Self::emit_admin("minter_removed", near_sdk::serde_json::json!({ "account_id": account_id }));
     }
 
     /// Transfer admin (e.g. hand off to the Sputnik DAO). Analogous to
@@ -194,7 +198,25 @@ impl Contract {
     pub fn set_owner(&mut self, new_owner: AccountId) {
         assert_one_yocto();
         self.assert_owner();
+        let old_owner = self.owner_id.clone();
+        Self::emit_admin("owner_changed", near_sdk::serde_json::json!({ "old_owner": old_owner, "new_owner": new_owner }));
         self.owner_id = new_owner;
+    }
+
+    fn emit_admin(event: &str, mut data: near_sdk::serde_json::Value) {
+        if let Some(obj) = data.as_object_mut() {
+            obj.insert(
+                "by".to_string(),
+                near_sdk::serde_json::json!(near_sdk::env::predecessor_account_id()),
+            );
+        }
+        let payload = near_sdk::serde_json::json!({
+            "standard": "kzr_admin",
+            "version": "1.0.0",
+            "event": event,
+            "data": [data],
+        });
+        near_sdk::env::log_str(&format!("EVENT_JSON:{}", payload));
     }
 
 
@@ -331,6 +353,20 @@ mod tests {
     fn new_contract() -> Contract {
         setup(accounts(0), 0);
         Contract::new(accounts(0), accounts(1), U128(1_000 * 10u128.pow(18)))
+    }
+
+    #[test]
+    fn admin_action_emits_kzr_admin_event() {
+        let mut c = new_contract();
+        setup(accounts(0), 1);
+        c.add_minter(accounts(2));
+        let ev = near_sdk::test_utils::get_logs()
+            .into_iter()
+            .find(|l| l.contains("EVENT_JSON"))
+            .expect("admin event not emitted");
+        assert!(ev.contains("\"standard\":\"kzr_admin\""));
+        assert!(ev.contains("\"event\":\"minter_added\""));
+        assert!(ev.contains("\"by\":"));
     }
 
     #[test]
