@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --experimental-strip-types src/server.ts",
+    "start": "tsx src/server.ts",
     "sign": "node --experimental-strip-types src/sign-cli.ts",
     "selftest": "node --experimental-strip-types src/selftest.ts"
+  },
+  "dependencies": {
+    "tsx": "4.19.2"
   }
 }

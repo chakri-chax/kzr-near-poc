@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --experimental-strip-types src/server.ts"
+    "start": "tsx src/server.ts"
   },
   "dependencies": {
-    "near-api-js": "5.0.1"
+    "near-api-js": "5.0.1",
+    "tsx": "4.19.2"
   }
 }
