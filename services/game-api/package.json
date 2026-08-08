@@ -9,6 +9,8 @@
     "selftest": "node --experimental-strip-types src/selftest.ts"
   },
   "dependencies": {
+    "near-api-js": "5.0.1",
+    "pg": "8.13.1",
     "tsx": "4.19.2"
   }
 }

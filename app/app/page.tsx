@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CONTRACTS, DEMO_ACCOUNT, EXPLORER, RELAYER_URL, ROSTER } from "../lib/config";
+import { CONTRACTS, DEMO_ACCOUNT, EXPLORER, RELAYER_URL, ROSTER, GAME_API_URL, NEP413_RECIPIENT, NEP413_MESSAGE } from "../lib/config";
 import { getInventory, getFtBalance, getRate, fmtToken } from "../lib/near";
 import { fetchActivity, buildFeed, type FeedEntry } from "../lib/indexer";
 import { useWallet } from "../lib/wallet";
@@ -45,7 +45,7 @@ const TOK = {
 const CRAFT_PENDING = "kzr_pending_craft";
 
 export default function Home() {
-  const { accountId, signIn, signOut, signAndSend } = useWallet();
+  const { accountId, signIn, signOut, signAndSend, signMessage } = useWallet();
   const account = accountId ?? DEMO_ACCOUNT;
   const [live, setLive] = useState<Live | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -58,6 +58,8 @@ export default function Home() {
   const [step, setStep] = useState(0);
   const [holding, setHolding] = useState(false);
   const [crafting, setCrafting] = useState(false);
+  const [missionBusy, setMissionBusy] = useState(false);
+  const [serverMission, setServerMission] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -91,6 +93,7 @@ export default function Home() {
     setLive(null);
     setFeed(null);
     setStep(0);
+    setServerMission(false);
     load();
     loadFeed();
   }, [load, loadFeed]);
@@ -152,18 +155,66 @@ export default function Home() {
     }
   }, [accountId, signIn, load, loadFeed]);
 
-  const advance = useCallback(() => {
+  const gameApiPost = useCallback(async (path: string, body: object) => {
+    const r = await fetch(`${GAME_API_URL}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error ?? `game-api ${r.status}`);
+    return j;
+  }, []);
+
+  const proveOwnership = useCallback(async () => {
+    const nonce = crypto.getRandomValues(new Uint8Array(32));
+    const signed = await signMessage({ message: NEP413_MESSAGE, recipient: NEP413_RECIPIENT, nonce });
+    return {
+      accountId: signed.accountId,
+      publicKey: signed.publicKey,
+      signature: signed.signature,
+      message: NEP413_MESSAGE,
+      nonce: btoa(String.fromCharCode(...nonce)),
+      recipient: NEP413_RECIPIENT,
+    };
+  }, [signMessage]);
+
+  const advance = useCallback(async () => {
     if (!accountId) return signIn();
-    if (step === 2) {
-      setHolding(true);
-      setTimeout(() => {
+    if (missionBusy || holding) return;
+    setMissionBusy(true);
+    setNote(null);
+    try {
+      if (step === 0) {
+        try {
+          const proof = await proveOwnership();
+          await gameApiPost("/mission/start", { account_id: accountId, proof });
+          await gameApiPost("/mission/objective", { account_id: accountId, step: 1 });
+          setServerMission(true);
+        } catch {
+          setServerMission(false);
+          setNote("Mission proof skipped (wallet declined or unsupported) — you can still claim, without the NXC reward.");
+        }
+        setStep(1);
+      } else if (step === 2) {
+        setHolding(true);
+        await new Promise((r) => setTimeout(r, 2400));
+        if (serverMission) {
+          try { await gameApiPost("/mission/objective", { account_id: accountId, step: 3 }); } catch { setServerMission(false); }
+        }
         setHolding(false);
         setStep(3);
-      }, 2400);
-      return;
+      } else if (step < 4) {
+        const next = step + 1;
+        if (serverMission) {
+          try { await gameApiPost("/mission/objective", { account_id: accountId, step: next }); } catch { setServerMission(false); }
+        }
+        setStep(next);
+      }
+    } finally {
+      setMissionBusy(false);
     }
-    if (step < 4) setStep((s) => s + 1);
-  }, [accountId, signIn, step]);
+  }, [accountId, signIn, step, holding, missionBusy, serverMission, proveOwnership, gameApiPost]);
 
   const relayCraftMint = useCallback(async (acct: string) => {
     const r = await fetch(`${RELAYER_URL}/relay/craft`, {
@@ -307,8 +358,8 @@ export default function Home() {
               })}
             </ul>
             {step < 4 ? (
-              <button type="button" className="btn btn-primary btn-block" onClick={advance} disabled={holding}>
-                {accountId ? (holding ? "Holding the node…" : STEP_ACTION[step]) : "Connect to Begin Mission"}
+              <button type="button" className="btn btn-primary btn-block" onClick={advance} disabled={holding || missionBusy}>
+                {accountId ? (holding ? "Holding the node…" : missionBusy ? "Working…" : STEP_ACTION[step]) : "Connect to Begin Mission"}
               </button>
             ) : (
               <button type="button" className="btn btn-primary btn-block" onClick={claim} disabled={claiming || claimed}>

@@ -19,6 +19,11 @@ interface Ctx {
     gasTgas: number,
     depositYocto: string,
   ) => Promise<unknown>;
+  signMessage: (params: { message: string; recipient: string; nonce: Uint8Array }) => Promise<{
+    accountId: string;
+    publicKey: string;
+    signature: string;
+  }>;
 }
 
 const WalletCtx = createContext<Ctx | null>(null);
@@ -73,6 +78,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             },
           ],
         });
+      },
+      signMessage: async (params) => {
+        const w = await selector!.wallet();
+        const anyW = w as unknown as {
+          signMessage?: (p: { message: string; recipient: string; nonce: Uint8Array }) => Promise<{ accountId: string; publicKey: string; signature: string }>;
+        };
+        if (!anyW.signMessage) throw new Error("This wallet does not support message signing");
+        return anyW.signMessage(params);
       },
     }),
     [accountId, selector, modal],

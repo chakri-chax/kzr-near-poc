@@ -12,6 +12,9 @@ export const DEMO_ACCOUNT = process.env.NEXT_PUBLIC_DEMO_ACCOUNT ?? "kzr-dev.tes
 export const EXPLORER = "https://testnet.nearblocks.io/address";
 export const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL ?? "http://localhost:8081";
 export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL ?? "http://localhost:8082";
+export const GAME_API_URL = process.env.NEXT_PUBLIC_GAME_API_URL ?? "http://localhost:8080";
+export const NEP413_RECIPIENT = process.env.NEXT_PUBLIC_NEP413_RECIPIENT ?? "squadlegacy.testnet";
+export const NEP413_MESSAGE = "Squad Legacy: prove control of your Pioneer";
 
 export interface Item {
   token_id: string;
