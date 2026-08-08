@@ -14,11 +14,35 @@ interface Live {
 }
 
 const OBJECTIVES = [
-  { label: "Deploy to the Nexus Zone", state: "done" },
-  { label: "Reach the power node", state: "done" },
-  { label: "Hold the node", state: "active" },
-  { label: "Stabilize & awaken", state: "" },
+  "Deploy to the Nexus Zone",
+  "Reach the power node",
+  "Hold the node",
+  "Stabilize & awaken",
 ];
+
+const STEP_ACTION = [
+  "Deploy to Nexus Zone 07",
+  "Advance to the power node",
+  "Hold the node",
+  "Stabilize & awaken",
+];
+
+const SEPHRENIA = [
+  "Pioneer — the dormant power node is within reach. Reclaim it, and a fragment of the fractured universe returns to the Restoration.",
+  "You're through the breach. Corruption runs heavy ahead — push to the power node.",
+  "The node pulses beneath the rubble. Hold position while I sync the restoration sequence.",
+  "Sequence locked. Channel the stabilizer, Pioneer — awaken it.",
+  "The Nexus breathes again. Your reward is authorized — claim it.",
+];
+
+const TOK = {
+  cell: "281479271677953",
+  fragment: "2306124497075306497",
+  mk1: "2306124497075306513",
+  hackclaw: "2306124505665241089",
+};
+
+const CRAFT_PENDING = "kzr_pending_craft";
 
 export default function Home() {
   const { accountId, signIn, signOut, signAndSend } = useWallet();
@@ -31,6 +55,9 @@ export default function Home() {
   const [note, setNote] = useState<string | null>(null);
   const [feed, setFeed] = useState<FeedEntry[] | null>(null);
   const [feedDown, setFeedDown] = useState(false);
+  const [step, setStep] = useState(0);
+  const [holding, setHolding] = useState(false);
+  const [crafting, setCrafting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -63,6 +90,7 @@ export default function Home() {
   useEffect(() => {
     setLive(null);
     setFeed(null);
+    setStep(0);
     load();
     loadFeed();
   }, [load, loadFeed]);
@@ -124,7 +152,97 @@ export default function Home() {
     }
   }, [accountId, signIn, load, loadFeed]);
 
+  const advance = useCallback(() => {
+    if (!accountId) return signIn();
+    if (step === 2) {
+      setHolding(true);
+      setTimeout(() => {
+        setHolding(false);
+        setStep(3);
+      }, 2400);
+      return;
+    }
+    if (step < 4) setStep((s) => s + 1);
+  }, [accountId, signIn, step]);
+
+  const relayCraftMint = useCallback(async (acct: string) => {
+    const r = await fetch(`${RELAYER_URL}/relay/craft`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ account_id: acct }),
+    });
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error ?? "craft relay failed");
+  }, []);
+
+  const craft = useCallback(async () => {
+    if (!accountId) return signIn();
+    setCrafting(true);
+    setNote(null);
+    try {
+      localStorage.setItem(CRAFT_PENDING, accountId);
+      await signAndSend(
+        CONTRACTS.assets,
+        "burn_for_craft",
+        { token_ids: [TOK.cell, TOK.fragment], amounts: ["20", "2"], memo: "craft-mk1" },
+        30,
+        "0",
+      );
+      localStorage.removeItem(CRAFT_PENDING);
+      await relayCraftMint(accountId);
+      setNote("MK-1 Stability Module forged — burn signed in your wallet, module minted gasless.");
+      setTimeout(load, 1500);
+      setTimeout(loadFeed, 7000);
+      setTimeout(loadFeed, 20000);
+    } catch (e) {
+      localStorage.removeItem(CRAFT_PENDING);
+      setNote(String(e));
+    } finally {
+      setCrafting(false);
+    }
+  }, [accountId, signIn, signAndSend, relayCraftMint, load, loadFeed]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pending = localStorage.getItem(CRAFT_PENDING);
+    if (pending && params.get("transactionHashes")) {
+      localStorage.removeItem(CRAFT_PENDING);
+      setCrafting(true);
+      relayCraftMint(pending)
+        .then(() => {
+          setNote("MK-1 Stability Module forged — module minted gasless.");
+          setTimeout(load, 1500);
+          setTimeout(loadFeed, 4000);
+        })
+        .catch((e) => setNote(String(e)))
+        .finally(() => setCrafting(false));
+    } else if (pending && params.get("errorCode")) {
+      localStorage.removeItem(CRAFT_PENDING);
+    }
+    if (params.get("transactionHashes") || params.get("errorCode")) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [relayCraftMint, load, loadFeed]);
+
+  const inv = (id: string) => (live ? Number(live.inventory[id] ?? "0") : 0);
+  const claimed = !!live && inv(TOK.hackclaw) > 0;
+  const mk1Owned = inv(TOK.mk1) > 0;
+  const canCraft = !!live && inv(TOK.cell) >= 20 && inv(TOK.fragment) >= 2 && !mk1Owned;
+
+  useEffect(() => {
+    if (accountId && claimed) setStep(4);
+  }, [accountId, claimed]);
+
   const rateLabel = live ? `${live.rate[1]} NXC = ${live.rate[0]} KZR` : "…";
+  const craftLabel = !accountId
+    ? "Connect to Craft"
+    : crafting
+      ? "Crafting…"
+      : mk1Owned
+        ? "MK-1 Crafted ✓"
+        : canCraft
+          ? "Craft Upgrade"
+          : "Need 20 Cell + 2 Fragment";
 
   return (
     <>
@@ -161,6 +279,7 @@ export default function Home() {
             Viewing <b>{DEMO_ACCOUNT}</b> (live). Connect a testnet wallet to play as your Pioneer.
           </div>
         )}
+        {note && <div className="notice" style={{ marginTop: 12 }}>{note}</div>}
 
         <div className="hero">
           <div className="panel mission">
@@ -169,21 +288,34 @@ export default function Home() {
             <div className="sephrenia">
               <div>
                 <div className="who">◈ Sephrenia</div>
-                <p>Pioneer — the dormant power node is within reach. Reclaim it, and a fragment of the fractured universe returns to the Restoration.</p>
+                <p>{claimed ? "Loot secured. The Restoration remembers this, Pioneer." : SEPHRENIA[step]}</p>
               </div>
             </div>
             <ul className="objectives">
-              {OBJECTIVES.map((o, i) => (
-                <li key={i} className={o.state}>
-                  <span className="onode">{o.state === "done" ? "✓" : i + 1}</span>
-                  <span className="olabel">{o.label}</span>
-                  <span className="ostat">{o.state === "done" ? "Complete" : o.state === "active" ? "In progress" : "Locked"}</span>
-                </li>
-              ))}
+              {OBJECTIVES.map((label, i) => {
+                const done = i < step;
+                const holdingHere = i === step && holding;
+                const active = i === step && !holding;
+                const state = done ? "done" : active || holdingHere ? "active" : "";
+                return (
+                  <li key={label} className={state}>
+                    <span className="onode">{done ? "✓" : i + 1}</span>
+                    <span className="olabel">{label}</span>
+                    <span className="ostat">{done ? "Complete" : holdingHere ? "Holding…" : active ? "In progress" : "Locked"}</span>
+                  </li>
+                );
+              })}
             </ul>
-            <button type="button" className="btn btn-primary btn-block" onClick={claim} disabled={claiming}>
-              {accountId ? (claiming ? "Claiming…" : "Claim Loot") : "Connect to Claim"} <span className="gasless">Gasless</span>
-            </button>
+            {step < 4 ? (
+              <button type="button" className="btn btn-primary btn-block" onClick={advance} disabled={holding}>
+                {accountId ? (holding ? "Holding the node…" : STEP_ACTION[step]) : "Connect to Begin Mission"}
+              </button>
+            ) : (
+              <button type="button" className="btn btn-primary btn-block" onClick={claim} disabled={claiming || claimed}>
+                {claimed ? "Loot Claimed ✓" : claiming ? "Claiming…" : "Claim Loot"}
+                {!claimed && <span className="gasless">Gasless</span>}
+              </button>
+            )}
           </div>
 
           <div className="sidecol">
@@ -206,7 +338,6 @@ export default function Home() {
               <button className="btn btn-primary btn-block" onClick={convert} disabled={busy}>
                 {accountId ? (busy ? "Submitting…" : "Convert to KZR") : "Connect to Convert"}
               </button>
-              {note && <div className="notice">{note}</div>}
             </div>
 
             <div className="panel">
@@ -219,9 +350,15 @@ export default function Home() {
                 <span className="out">MK-1 Stability Module</span>
               </div>
               <div style={{ height: 14 }}></div>
-              <button type="button" className="btn btn-ghost btn-block" disabled title="Gasless craft — coming soon">
-                Craft Upgrade <span className="gasless">Gasless · soon</span>
+              <button
+                type="button"
+                className={`btn ${canCraft ? "btn-primary" : "btn-ghost"} btn-block`}
+                onClick={craft}
+                disabled={crafting || (!!accountId && !canCraft)}
+              >
+                {craftLabel}
               </button>
+              <div className="rate" style={{ marginTop: 10 }}>Burn signed in your wallet · MK-1 minted <b>gasless</b></div>
             </div>
           </div>
         </div>
