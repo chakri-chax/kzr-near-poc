@@ -1,0 +1,28 @@
+# secrets — never commit
+.env
+.env.*
+.signer.json
+*.pem
+*.key
+
+# node
+node_modules/
+**/node_modules/
+
+# next.js
+.next/
+**/.next/
+**/out/
+
+# rust build (Cargo.lock IS committed — reproducible contract builds)
+/target
+**/target
+
+# vercel
+.vercel/
+**/.vercel/
+
+# logs / os
+*.log
+.DS_Store
+Resources

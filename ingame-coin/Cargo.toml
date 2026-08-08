@@ -1,0 +1,17 @@
+[package]
+name = "ingame-coin"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.86"
+description = "Nexus Credits (NXC) — NEP-141 in-game currency for Squad Legacy."
+repository = "https://github.com/kruzer/near-poc"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5.29"
+near-contract-standards = "5.29"
+
+[dev-dependencies]
+near-sdk = { version = "5.29", features = ["unit-testing"] }

@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["kzr-token", "game-assets", "ingame-coin", "ingame-conversion"]
+exclude = ["integration-tests"]
+
+# NEAR contract release profile (cargo-near also applies its own optimizations).
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true

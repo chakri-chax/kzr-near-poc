@@ -1,0 +1,16 @@
+[package]
+name = "ingame-conversion"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.86"
+description = "One-way NXC->KZR conversion (ft_transfer_call receiver, async reserve-then-rollback)."
+repository = "https://github.com/kruzer/near-poc"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { version = "5.29", features = ["legacy"] }
+
+[dev-dependencies]
+near-sdk = { version = "5.29", features = ["unit-testing", "legacy"] }

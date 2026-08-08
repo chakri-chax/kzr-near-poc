@@ -1,0 +1,99 @@
+{
+  "base_uri": "ipfs://bafybeifbfxw7eekfgpbkcegamh4lqvenntecmvwxflpohco4lwwxlpnwhm/",
+  "art_cid": "bafybeih7xh72jrvvepitlkt6kin4p2n3enpl73qibupdzp55ge3xj6xeda",
+  "metadata_cid": "bafybeifbfxw7eekfgpbkcegamh4lqvenntecmvwxflpohco4lwwxlpnwhm",
+  "gateway": "maroon-reasonable-dragonfly-659.mypinata.cloud",
+  "items": [
+    {
+      "key": "rifle-cell",
+      "name": "Rifle Cell",
+      "token_id": "281479271677953",
+      "build_token_id": [
+        0,
+        1,
+        1,
+        1
+      ],
+      "metadata": "ipfs://bafybeifbfxw7eekfgpbkcegamh4lqvenntecmvwxflpohco4lwwxlpnwhm/281479271677953.json",
+      "media": "ipfs://bafybeih7xh72jrvvepitlkt6kin4p2n3enpl73qibupdzp55ge3xj6xeda/rifle-cell.svg"
+    },
+    {
+      "key": "nano-medkit",
+      "name": "Nano Medkit",
+      "token_id": "281492156579841",
+      "build_token_id": [
+        0,
+        1,
+        4,
+        1
+      ],
+      "metadata": "ipfs://bafybeifbfxw7eekfgpbkcegamh4lqvenntecmvwxflpohco4lwwxlpnwhm/281492156579841.json",
+      "media": "ipfs://bafybeih7xh72jrvvepitlkt6kin4p2n3enpl73qibupdzp55ge3xj6xeda/nano-medkit.svg"
+    },
+    {
+      "key": "weapon-mod-fragment",
+      "name": "Weapon-Mod Fragment",
+      "token_id": "2306124497075306497",
+      "build_token_id": [
+        2,
+        1,
+        3,
+        1
+      ],
+      "metadata": "ipfs://bafybeifbfxw7eekfgpbkcegamh4lqvenntecmvwxflpohco4lwwxlpnwhm/2306124497075306497.json",
+      "media": "ipfs://bafybeih7xh72jrvvepitlkt6kin4p2n3enpl73qibupdzp55ge3xj6xeda/weapon-mod-fragment.svg"
+    },
+    {
+      "key": "mk1-stability-module",
+      "name": "MK-1 Stability Module",
+      "token_id": "2306124497075306513",
+      "build_token_id": [
+        2,
+        1,
+        3,
+        17
+      ],
+      "metadata": "ipfs://bafybeifbfxw7eekfgpbkcegamh4lqvenntecmvwxflpohco4lwwxlpnwhm/2306124497075306513.json",
+      "media": "ipfs://bafybeih7xh72jrvvepitlkt6kin4p2n3enpl73qibupdzp55ge3xj6xeda/mk1-stability-module.svg"
+    },
+    {
+      "key": "adaptive-armor-skin",
+      "name": "Adaptive Armor Skin",
+      "token_id": "1153202988173492225",
+      "build_token_id": [
+        1,
+        1,
+        2,
+        1
+      ],
+      "metadata": "ipfs://bafybeifbfxw7eekfgpbkcegamh4lqvenntecmvwxflpohco4lwwxlpnwhm/1153202988173492225.json",
+      "media": "ipfs://bafybeih7xh72jrvvepitlkt6kin4p2n3enpl73qibupdzp55ge3xj6xeda/adaptive-armor-skin.svg"
+    },
+    {
+      "key": "first-restoration-badge",
+      "name": "First Restoration Badge",
+      "token_id": "3459045988797251585",
+      "build_token_id": [
+        3,
+        1,
+        0,
+        1
+      ],
+      "metadata": "ipfs://bafybeifbfxw7eekfgpbkcegamh4lqvenntecmvwxflpohco4lwwxlpnwhm/3459045988797251585.json",
+      "media": "ipfs://bafybeih7xh72jrvvepitlkt6kin4p2n3enpl73qibupdzp55ge3xj6xeda/first-restoration-badge.svg"
+    },
+    {
+      "key": "hackclaw",
+      "name": "Hackclaw",
+      "token_id": "2306124505665241089",
+      "build_token_id": [
+        2,
+        1,
+        5,
+        1
+      ],
+      "metadata": "ipfs://bafybeifbfxw7eekfgpbkcegamh4lqvenntecmvwxflpohco4lwwxlpnwhm/2306124505665241089.json",
+      "media": "ipfs://bafybeih7xh72jrvvepitlkt6kin4p2n3enpl73qibupdzp55ge3xj6xeda/hackclaw.svg"
+    }
+  ]
+}
