@@ -21,7 +21,10 @@ createServer((req, res) => {
     res.end(JSON.stringify({ ok: true, relayer: CONFIG.relayerId }));
     return;
   }
-  if (req.method === "POST" && (req.url ?? "").startsWith("/relay/claim")) {
+  const path = req.url ?? "";
+  const isClaim = req.method === "POST" && path.startsWith("/relay/claim");
+  const isCraft = req.method === "POST" && path.startsWith("/relay/craft");
+  if (isClaim || isCraft) {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", async () => {
@@ -29,7 +32,8 @@ createServer((req, res) => {
         const { account_id, mission_id = "awaken-the-nexus" } = JSON.parse(body || "{}");
         if (!account_id) { res.statusCode = 400; res.end(JSON.stringify({ error: "account_id required" })); return; }
         if (!rateOk(account_id)) { res.statusCode = 429; res.end(JSON.stringify({ error: "rate limited" })); return; }
-        const r = await fetch(`${CONFIG.gameApiUrl}/mission/complete`, {
+        const endpoint = isCraft ? "/craft/complete" : "/mission/complete";
+        const r = await fetch(`${CONFIG.gameApiUrl}${endpoint}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ account_id, mission_id }),

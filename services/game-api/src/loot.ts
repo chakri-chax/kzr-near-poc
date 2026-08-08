@@ -18,3 +18,18 @@ export const MISSIONS: Record<string, LootEntry[]> = {
 export function missionHash(missionId: string, accountId: string): Uint8Array {
   return createHash("sha256").update(`${missionId}:${accountId}`).digest();
 }
+
+export const CRAFT = {
+  inputs: [
+    { token_id: packTokenId(0, 1, 1, 1), amount: "20" },
+    { token_id: packTokenId(2, 1, 3, 1), amount: "2" },
+  ],
+  output: [
+    { token_id: packTokenId(2, 1, 3, 17), amount: "1" },
+    { token_id: packTokenId(3, 1, 0, 1), amount: "1" },
+  ],
+};
+
+export function craftHash(accountId: string): Uint8Array {
+  return createHash("sha256").update(`craft-mk1:${accountId}`).digest();
+}
