@@ -4,10 +4,16 @@ HTTP surfaces of the three backend services, plus the on-chain read/write surfac
 
 ## game-api — voucher signer (`kzr-game-api.onrender.com`)
 
-Signs ed25519 `MintVoucher`s. Holds the signer secret key (env `SIGNER_SK_B64` / `SIGNER_PK_B64`). Never touches the chain.
+Signs ed25519 `MintVoucher`s (env `SIGNER_SK_B64` / `SIGNER_PK_B64`), runs the Supabase mission-state machine, verifies NEP-413 ownership proofs, and mints the 500 NXC/mission reward via the `gameapi` key.
+
+### `POST /mission/start`
+Request: `{ "account_id", "mission_id"?, "proof" }` where `proof` is a **NEP-413** signed message `{ accountId, publicKey, signature, message, nonce (base64, 32 bytes), recipient }`. Verifies the ed25519 signature over `sha256(Borsh(payload))` **and** that the key is on `account_id` (RPC `view_access_key`); records the mission (`proven=true, step=0`). `401` on a bad proof.
+
+### `POST /mission/objective`
+Request: `{ "account_id", "mission_id"?, "step": 1..4 }`. Advances one objective; enforces order (`step == prev+1`), each-once, and bounds — `409` otherwise. Step 4 marks the mission `complete`.
 
 ### `POST /mission/complete`
-Request: `{ "account_id": "alice.testnet", "mission_id": "awaken-the-nexus" }` (`mission_id` optional, defaults to `awaken-the-nexus`).
+Request: `{ "account_id": "alice.testnet", "mission_id": "awaken-the-nexus" }` (`mission_id` optional, defaults to `awaken-the-nexus`). When the mission is server-confirmed (proven + complete) and past the min-time gate, mints **500 NXC** (idempotent) and returns the loot voucher. With `MISSION_GATING=strict` an unconfirmed mission is rejected (`409`/`401`/`425`); with `lenient` (default) the voucher is still issued so the one-click demo keeps working.
 Response: the exact args object for `assets.mint_with_voucher`:
 ```json
 {

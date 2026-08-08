@@ -133,9 +133,12 @@ sequenceDiagram
 - **Player-authorised burns.** `burn_for_craft` and conversion `ft_transfer_call` burn/move the player's own balance and are always wallet-signed; the relayer never moves player funds.
 - **Conversion safety.** Reserve-then-rollback keeps caps monotonic even when the async KZR mint fails; caps use `checked_add`. See `docs/audit/AUDIT_READINESS.md`.
 
+## Mission-state, ownership proof & rewards (game-api)
+
+`game-api` runs a Supabase-backed **mission-state machine** (start → 4 ordered objectives → complete) with order/each-once/monotonic/idempotency checks and a **minimum-elapsed-time gate**, a **NEP-413** wallet-ownership proof gating `/mission/start`, and **500 NXC/mission** minting (via the `gameapi` minter key) on server-confirmed completion. `MISSION_GATING=strict` requires server-validated completion before the loot voucher is issued; `lenient` (default) falls back to issuing the voucher so the one-click demo keeps working when a wallet can't `signMessage`.
+
 ## Known gaps (tracked)
 
-- Server-validated mission-state (ordering, min-time gate) + NXC mission reward — **ticket 22**.
+- **KMS custody** for the signer / relayer / gameapi keys (currently service env vars) — the mainnet step; needs a cloud KMS provider + credentials. See `RUNBOOK.md`.
 - Full NEP-366 meta-transaction gasless burn (function-call access keys) — relayer hardening; the slice ships wallet-signed burns instead.
-- KMS custody for signer/relayer keys (currently Render env vars) — **ticket 22**.
 - Mainnet cut (Sputnik DAO admin, key-lock immutability) — out of scope for the slice; see `RUNBOOK.md`.
